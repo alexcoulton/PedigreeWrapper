@@ -45,7 +45,8 @@ run.1000.sims = function(project.name, f.gen, num.sims, w.selec, selec.str, sele
   #f.gen - integer, the highest filial generation of the population
   #num.sims - integer the number of simulations to perform
   #w.selec - boolean flag, indicates whether selection is to applied
-  #selec.str - integer, the strength of selection to be used (ranging from 0 - 1)
+  #selec.str - integer, the denominator of strength of selection to be used. (e.g. 10, would indicate a selection strength of
+    # 1/10, meaning one parental allele is 10% more viable than the other.
   #selec.pos - integer, the marker number against which to apply selection (e.g. 50 for the 50th marker)
   #pop.size - integer, the number of individuals in the population
   #cm.pos - numeric vector, the centimorgan positions of markers
