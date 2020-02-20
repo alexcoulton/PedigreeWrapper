@@ -1,24 +1,21 @@
-#CHANGE THIS TO YOUR PEDIGREESIM INSTALLATION PATH
-pedigreesim.path = "/home/USERNAME/PEDIGREESIM/"
+#Coulton et al. (2020) - Segregation distortion: utilizing simulated genotyping data to evaluate statistical methods
+#This script implements selection for PedigreeSim (Voorrips & Maliepaard, 2012) for a single seed descent population structure of a biparental cross.
+#The script was written in R version 3.6.1
 
 
+#Instructions:
+#You must have PedigreeSim installed to utilize this script. Analyses are run with the run.1000.sims() function. See the function notes for details on the 
+#arguments that can be supplied, these include the filial generation, the number of simulations, whether to apply selection or not, the selection strength,
+#selection position, population size and distribution of markers in centimorgans. Results can be analysed using the perform.analysis() function. The script
+#will store the results of simulations and analysis of simulations in the PedigreeSim installation folder.
 
-
-
-
-#####################################
-#####################################
-full.path = pedigreesim.path
-setwd(full.path)
-load(paste0(full.path, "pedsim.files/axc.chr1a.cm"))
-load(paste0(full.path, "pedsim.files/cxa.6b.cm"))
 
 #create directory structure
 if(!dir.exists(paste0(full.path, "analyses"))) dir.create("analyses")
 if(!dir.exists(paste0(full.path, "config.files"))) dir.create("config.files")
 if(!dir.exists(paste0(full.path, "simresults"))) dir.create("simresults")
 if(!dir.exists(paste0(full.path, "example.config"))) dir.create("example.config")
-if(!dir.exists(paste0(full.path, "10k.sims"))) dir.create("10k.sims")
+if(!dir.exists(paste0(full.path, "10k.sim"))) dir.create("10k.sim")
 
 #### MISC FUNCTIONS ####
 
@@ -35,7 +32,56 @@ convert.to.character.data.frame = function(df){
   return(g)
 }
 
+s <- function(object, filepath, original.script.name){  
+  #modified save() function
+  #stores the name of the script from which the object originates as an attribute, then saves as normal
+  objectname <- deparse(substitute(object))
+  attr(object, "original.script") = original.script.name
+  save_envir <- new.env()
+  save_envir[[objectname]] <- object
+  save(list=objectname, file = filepath, envir=save_envir)
+}
+
+reset.rownames = function(x){
+  rownames(x) = 1:nrow(x)
+  return(x)
+}
+
+#make a new dataframe
+newdf = function(..., no.rows){
+  #...: an unlimited number of column names
+  #no.rows: boolean value, should the dataframe contain zero rows?
+  if(missing(no.rows)) no.rows = F
+  df=as.data.frame(matrix(nrow=1, ncol=length(c(...))))
+  df[is.na(df)]=""
+  colnames(df)=c(...)
+  
+  if(no.rows == T){
+    df = df[-1, ]
+  }
+  
+  return(df)
+}
+
+reset.colnames <<- function(df, which.columns){
+  #which.colnames: numeric vector, if only a subset of the columns are to be reset, specify which ones
+  if(missing(which.columns)) which.columns = 1:ncol(df)
+  g = which.columns
+  g = paste("V", g, sep = "")
+  colnames(df)[which.columns] = g
+  return(df)
+}
+
+
+
 #### PEDSIM FUNCTIONS ####
+
+run.1000.sims.preparation = function(project.name, f.gen, num.sims, w.selec, selec.str, selec.pos, pop.size, cm.pos, perform.analysis.flag){
+  run.1000.sims()
+  run.1000.sims
+}
+
+
 
 run.1000.sims = function(project.name, f.gen, num.sims, w.selec, selec.str, selec.pos, pop.size, cm.pos, perform.analysis.flag){
   #generates multiple genotyping datasets by running pedigreesim with the specified parameters for the specified number of simulations. Performs gamete selection procedure from the specified number of filial generations.
@@ -45,8 +91,7 @@ run.1000.sims = function(project.name, f.gen, num.sims, w.selec, selec.str, sele
   #f.gen - integer, the highest filial generation of the population
   #num.sims - integer the number of simulations to perform
   #w.selec - boolean flag, indicates whether selection is to applied
-  #selec.str - integer, the denominator of strength of selection to be used. (e.g. 10, would indicate a selection strength of
-    # 1/10, meaning one parental allele is 10% more viable than the other.
+  #selec.str - integer, the strength of selection to be used, this acts as the denominator of the selection threshold. e.g. 2 = 1/2 = half of the gametes with a particular genotype at the marker under selection will be culled; 10 = 1/10 = one tenth will be culled.
   #selec.pos - integer, the marker number against which to apply selection (e.g. 50 for the 50th marker)
   #pop.size - integer, the number of individuals in the population
   #cm.pos - numeric vector, the centimorgan positions of markers
@@ -58,17 +103,24 @@ run.1000.sims = function(project.name, f.gen, num.sims, w.selec, selec.str, sele
   if(missing(cm.pos)) cm.pos = axc.chr1a.cm
   if(missing(perform.analysis.flag)) perform.analysis.flag = T
   
+
+  if(w.selec == T){
+    if(!file.exists(paste0(full.path, "10k.sim/", project.name, ".pop10k.output_genotypes.dat"))){
+      complete.fgen.no.selec.procedure(length(cm.pos), 10000, f.gen, cm.pos, full.path, paste0(project.name, "_10ksim!_"), "KOSAMBI", T)
+      file.copy(paste0(full.path, "simresults/", project.name, "_10ksim!_.output_genotypes.dat"), paste0(full.path, "10k.sim/", project.name, ".pop10k.output_genotypes.dat"))
+    }    
+    geno.10k <<- read.ped(p(full.path, "10k.sim/", project.name, ".pop10k.output_genotypes.dat"))
+  }  
+
   t1 = mclapply(1:num.sims, function(x){
-    if(w.selec == T){
+    if(w.selec == T){      
       complete.f5.selection.procedure(length(cm.pos), pop.size, f.gen, cm.pos, full.path, paste0(project.name, x), "KOSAMBI", T, selec.str, selec.pos)  
     } else {
       complete.fgen.no.selec.procedure(length(cm.pos), pop.size, f.gen, cm.pos, full.path, paste0(project.name, x), "KOSAMBI", T)
     }
-  }, mc.cores = 60)
+  }, mc.cores = number.of.cores)
   
-  clean.files()  
-  
-  # browser()
+  clean.files()   
   
   if(w.selec == T){
     files.to.combine = list.files(p(full.path, "simresults/"), 
@@ -78,7 +130,7 @@ run.1000.sims = function(project.name, f.gen, num.sims, w.selec, selec.str, sele
                                   pattern = p(project.name, ".*output_genotypes.dat"))
   }
   
-  
+  print(files.to.combine)
   all.sim.files = mclapply(files.to.combine, function(x){
     
     
@@ -89,21 +141,19 @@ run.1000.sims = function(project.name, f.gen, num.sims, w.selec, selec.str, sele
     rownames(g) = paste0("marker", rownames(g))
     g = as.data.frame(t(g))
     g = g[grep(p("F", f.gen), rownames(g)), ]
-  }, mc.cores = 60)
-  
+  }, mc.cores = number.of.cores)
+
   if(class(all.sim.files[[1]]) != "data.frame"){
     all.sim.files = lapply(all.sim.files, as.data.frame)
   }
-  
-  # browser()
+    
   
   if(f.gen == 2){
     f2flag = T
   } else {
     f2flag = F
   }
-  
-  # browser()
+   
   
   s(all.sim.files, p(full.path, "simresults/", project.name), "NA")
   
@@ -235,7 +285,7 @@ make.pedsim.config.files.and.run = function(num.markers, num.individuals, f.gen,
   make.pedsim.par.file(project.name, p(write.path.folder, "/", project.name, ".par"), map.function = map.function)
   
   if(run1 == T){
-    system(p("java -jar " full.path, "PedigreeSim.jar ", full.path, project.name, ".par"))  
+    system(p("java -jar ", full.path, "PedigreeSim.jar ", full.path, project.name, ".par"))  
   }  
 }
 
@@ -252,7 +302,7 @@ make.pedsim.par.files.and.run.f3.selec = function(write.path.folder, project.nam
   make.pedsim.par.file.f3.selec(project.name, uniqueid, p(write.path.folder, "/", uniqueid, "_", project.name, ".par"), map.function = map.function)
   
   if(run1 == T){
-    system(p("java -jar " full.path, "PedigreeSim.jar ", full.path, uniqueid, "_", project.name, ".par"))  
+    system(p("java -jar ", full.path, "PedigreeSim.jar ", full.path, uniqueid, "_", project.name, ".par"))  
   }
 }
 
@@ -295,7 +345,7 @@ f2.selection.procedure = function(project.name, selection.strength, selection.po
   
   #if geno.10k doesn't already exists, load it and process it
   if(!exists("geno.10k")){
-    geno.10k = read.ped(p(full.path, "10k.sim/axc1a.pop10k.output_genotypes.dat"))
+    geno.10k = read.ped(p(full.path, "10k.sim", project.name, ".pop10k.output_genotypes.dat"))
     geno.10k = geno.10k[8:ncol(geno.10k)]
     geno.10k = geno.10k[, which(sapply(geno.10k, function(x) x[[selection.pos]] == "B"))]
   } 
@@ -304,7 +354,14 @@ f2.selection.procedure = function(project.name, selection.strength, selection.po
   f2.genotypes = read.ped(p(full.path, "simresults/", project.name, ".output_genotypes.dat"))
   
   to.replace = names(which(sapply(f2.genotypes[4:ncol(f2.genotypes)], function(x){
-    dice = sample(selection.strength, 1)
+    newdice = runif(1)
+    threshold1 = 1 / selection.strength
+    if(newdice < threshold1){
+        dice = 1
+      } else {
+        dice = 2
+      }
+    # dice = sample(selection.strength, 1)
     if(dice == 1 & x[[selection.pos]] == "A"){
       return(T)
     } else {
@@ -354,8 +411,15 @@ f3.selection.procedure = function(project.name, uniqueid, f.gen, selection.stren
   
   
   selection.ind = which(sapply(ped.zygote2, function(x){
-    dice1 = sample(selection.strength, 1)
-    x[[selection.pos]] == "H" & dice1 == 1
+    newdice = runif(1)
+    threshold1 = 1 / selection.strength
+    if(newdice < threshold1){
+        dice = 1
+      } else {
+        dice = 2
+      } 
+    # dice1 = sample(selection.strength, 1)
+    x[[selection.pos]] == "H" & dice == 1
   }))
   
   if(length(selection.ind) > 0){
@@ -601,7 +665,8 @@ complete.f5.selection.procedure = function(num.markers, num.individuals, f.gen, 
   f2.selection.procedure(project.name, selection.strength, selection.pos)
   
   if(f.gen > 2){
-    lapply(3:f.gen, function(x){
+    
+    lapply(3:f.gen, function(x){      
       make.files.next.iteration(project.name, x)
       unique.code = paste0(LETTERS[sample(26, 5)], collapse = "", sample(9, 4))
       f3.selection.procedure(project.name, unique.code, x, selection.strength, selection.pos)
@@ -982,4 +1047,3 @@ perform.analysis = function(geno.list, selection, selection.position, selection.
 
   
 }
-
